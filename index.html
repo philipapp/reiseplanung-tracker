@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Reiseplanung & Tracker</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reiseplaner">
+<meta name="theme-color" content="#0b0c10">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0b0c10;
+    --card: #1a1c22;
+    --card-2: #22242c;
+    --accent: #ff9f0a;
+    --text: #f5f5f7;
+    --text-dim: #9a9ba3;
+    --danger: #ff453a;
+    --good: #30d158;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    padding-top: max(24px, env(safe-area-inset-top));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 4px 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .navrow {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .navrow::-webkit-scrollbar { display: none; }
+  .navrow a {
+    flex: none;
+    background: var(--card);
+    color: var(--text-dim);
+    border: 1px solid #2c2e36;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .card {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .field {
+    margin-bottom: 14px;
+  }
+  .field:last-child { margin-bottom: 0; }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  input, select {
+    width: 100%;
+    background: var(--card-2);
+    border: none;
+    border-radius: 12px;
+    padding: 14px 14px;
+    font-size: 17px;
+    color: var(--text);
+    outline: none;
+    font-family: inherit;
+  }
+  input::placeholder { color: #5c5d66; }
+  input:focus, select:focus { box-shadow: 0 0 0 2px var(--accent); }
+  button {
+    width: 100%;
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #1a1300;
+    margin-top: 4px;
+  }
+  .btn-primary:active { opacity: 0.8; }
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid rgba(255,69,58,0.4);
+  }
+  .btn-danger:active { opacity: 0.7; }
+  .btn-export {
+    background: var(--card-2);
+    color: var(--text);
+    border: 1px solid #33353d;
+    font-size: 15px;
+    padding: 14px;
+  }
+  .btn-export:active { opacity: 0.7; }
+  .result {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #2c2e36;
+    font-size: 15px;
+    line-height: 1.9;
+  }
+  .result b { color: var(--good); }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .stat {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 12px 8px;
+    text-align: center;
+  }
+  .stat .val { font-size: 16px; font-weight: 700; }
+  .stat .val.neg { color: var(--danger); }
+  .stat .val.pos { color: var(--good); }
+  .stat .lbl { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .substat {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+  .empty { color: var(--text-dim); text-align: center; padding: 30px 0; font-size: 15px; }
+  section { scroll-margin-top: 16px; }
+  section h2 {
+    font-size: 15px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 24px 0 10px;
+  }
+  .entry-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #262832;
+    gap: 10px;
+  }
+  .entry-header .title { font-size: 15px; font-weight: 700; }
+  .entry-header .date { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+  .entry-header .kmstart { font-size: 13px; color: var(--text-dim); }
+  .entry-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 9px 14px;
+  }
+  .entry-grid .item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    gap: 6px;
+  }
+  .entry-grid .item span { color: var(--text-dim); }
+  .entry-grid .item b { font-weight: 600; white-space: nowrap; }
+  .entry-grid .verbrauch b, .entry-grid .preis b { color: var(--accent); }
+  .entry-status {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #262832;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .del-btn {
+    width: auto;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    padding: 0 0 0 8px;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .del-btn:active { color: var(--danger); }
+  .divider-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    margin: 26px 0 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .export-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .segmented {
+    display: flex;
+    gap: 8px;
+  }
+  .seg-btn {
+    flex: 1;
+    width: auto;
+    background: var(--card-2);
+    color: var(--text-dim);
+    border: 1px solid #33353d;
+    border-radius: 12px;
+    padding: 12px 6px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .seg-btn.active {
+    background: var(--accent);
+    color: #1a1300;
+    border-color: var(--accent);
+  }
+  .entry-actions { display: flex; gap: 14px; }
+  #routenkarte {
+    height: 260px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card-2);
+  }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+    background: var(--card-2);
+    color: var(--text);
+  }
+  .leaflet-control-attribution {
+    background: rgba(26,28,34,0.8) !important;
+    color: var(--text-dim) !important;
+  }
+  .leaflet-control-attribution a { color: var(--text-dim) !important; }
+  #printArea { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    #printArea, #printArea * { visibility: visible; }
+    #printArea {
+      display: block;
+      position: absolute;
+      left: 0; top: 0; width: 100%;
+      color: #000; background: #fff;
+    }
+    #printArea h2 { margin-top: 24px; }
+    #printArea table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 10px; }
+    #printArea th, #printArea td { border: 1px solid #999; padding: 6px 8px; text-align: right; color: #000; }
+    #printArea th:first-child, #printArea td:first-child { text-align: left; }
+    #printArea thead tr { background: #eee; }
+    #printArea tfoot td { font-weight: 700; background: #f2f2f2; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🧭 Reiseplanung &amp; Tracker</h1>
+
+<div class="navrow">
+  <a href="#budget">💶 Budget</a>
+  <a href="#etappen">🗺️ Etappen</a>
+  <a href="#maut" id="navMaut">🛣️ Maut</a>
+  <a href="#tanken" id="navTanken">⛽ Tanken</a>
+</div>
+
+<div class="card">
+  <div class="field">
+    <label>Reiseart</label>
+    <div class="segmented">
+      <button type="button" class="seg-btn" data-value="auto" onclick="reiseartSetzen('auto')">🚗 Auto</button>
+      <button type="button" class="seg-btn" data-value="flug" onclick="reiseartSetzen('flug')">✈️ Flugzeug</button>
+      <button type="button" class="seg-btn" data-value="flug_mietwagen" onclick="reiseartSetzen('flug_mietwagen')">✈️🚗 Flug + Mietwagen</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="field">
+    <label>Reise-Name</label>
+    <input id="reiseName" type="text" placeholder="z. B. Italien-Roadtrip" oninput="grundSpeichern()">
+  </div>
+  <div class="field-row">
+    <div class="field">
+      <label>Budget geplant (€)</label>
+      <input id="budgetGeplant" type="text" inputmode="decimal" placeholder="z. B. 4000" oninput="grundSpeichern()">
+    </div>
+    <div class="field">
+      <label>Personenanzahl</label>
+      <input id="personen" type="text" inputmode="numeric" placeholder="z. B. 2" oninput="grundSpeichern()">
+    </div>
+  </div>
+  <div class="field" id="flugkostenField" style="display:none;">
+    <label>Flugkosten (€)</label>
+    <input id="flugkosten" type="text" inputmode="decimal" placeholder="z. B. 450" oninput="grundSpeichern()">
+  </div>
+  <div class="field" id="mietwagenkostenField" style="display:none;">
+    <label>Mietwagenkosten (€)</label>
+    <input id="mietwagenkosten" type="text" inputmode="decimal" placeholder="z. B. 300" oninput="grundSpeichern()">
+  </div>
+</div>
+
+<section id="budget">
+  <h2>💶 Budget-Übersicht</h2>
+  <div class="stats" id="statsBudget"></div>
+  <div class="substat" id="streckeInfo"></div>
+</section>
+
+<section id="etappen">
+  <h2>🗺️ Etappen &amp; Hotels</h2>
+
+  <div class="card" id="kartenCard">
+    <div id="routenkarte"></div>
+    <div class="substat" id="kartenHinweis" style="margin-top:10px;margin-bottom:0;">Noch keine Etappen – füge eine Etappe hinzu, um die Route zu sehen.</div>
+  </div>
+
+  <div id="etappenListe"></div>
+
+  <div class="card">
+    <div class="field-row">
+      <div class="field">
+        <label>Von</label>
+        <input id="etVon" type="text" placeholder="z. B. Hamburg">
+      </div>
+      <div class="field">
+        <label>Nach</label>
+        <input id="etNach" type="text" placeholder="z. B. Backnang">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Anreisedatum</label>
+        <input id="etAnreise" type="date">
+      </div>
+      <div class="field">
+        <label>Abreisedatum</label>
+        <input id="etAbreise" type="date">
+      </div>
+    </div>
+    <div id="routeFelder">
+      <button type="button" class="btn-export" id="routeBtn" onclick="routeBerechnen()" style="margin-bottom:14px;">📍 Route automatisch berechnen (Von → Nach)</button>
+      <div class="field-row">
+        <div class="field">
+          <label>Strecke (km)</label>
+          <input id="etStrecke" type="text" inputmode="decimal" placeholder="z. B. 750">
+        </div>
+        <div class="field">
+          <label>Fahrzeit</label>
+          <input id="etFahrzeit" type="text" placeholder="z. B. 7 h">
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Hotel / Unterkunft</label>
+      <input id="etHotel" type="text" placeholder="z. B. Vue Cathedral">
+    </div>
+    <div class="field">
+      <label>Hotelkosten (€)</label>
+      <input id="etPreis" type="text" inputmode="decimal" placeholder="z. B. 653,56">
+    </div>
+    <div class="field">
+      <label>Buchungsstatus / Termin</label>
+      <input id="etStatus" type="text" placeholder="z. B. 19.06.2026 Abbuchung">
+    </div>
+    <button class="btn-primary" onclick="etappeSpeichern()">Etappe speichern</button>
+  </div>
+</section>
+
+<section id="maut">
+  <h2>🛣️ Mautkosten</h2>
+  <div id="mautListe"></div>
+
+  <div class="card">
+    <div class="field">
+      <label>Mautstelle / Land</label>
+      <input id="mautOrt" type="text" placeholder="z. B. Frankreich, A63">
+    </div>
+    <div class="field">
+      <label>Betrag (€)</label>
+      <input id="mautBetrag" type="text" inputmode="decimal" placeholder="z. B. 17,00">
+    </div>
+    <button class="btn-primary" onclick="mautSpeichern()">Maut speichern</button>
+  </div>
+</section>
+
+<section id="tanken">
+  <h2>⛽ Tanken</h2>
+  <div id="tankenListe"></div>
+
+  <div class="card">
+    <div class="field">
+      <label>Kilometerstand (Trip-Anzeige)</label>
+      <input id="tkKmStart" type="text" inputmode="decimal" placeholder="z. B. 430,1">
+    </div>
+    <div class="field">
+      <label>Getankte Liter</label>
+      <input id="tkLiter" type="text" inputmode="decimal" placeholder="z. B. 32,5">
+    </div>
+    <div class="field">
+      <label>Gesamtpreis (€)</label>
+      <input id="tkPreis" type="text" inputmode="decimal" placeholder="z. B. 55,90">
+    </div>
+    <button class="btn-primary" onclick="tankenSpeichern()">Tanken speichern</button>
+    <div class="result" id="tkResult" style="display:none"></div>
+  </div>
+</section>
+
+<div class="divider-label">Reise abschließen</div>
+<div class="export-row">
+  <button class="btn-export" onclick="exportPDF()">📄 PDF exportieren</button>
+  <button class="btn-export" onclick="exportCSV()">📊 Excel exportieren</button>
+</div>
+<button class="btn-danger" onclick="allesLoeschen()">Alle Daten löschen</button>
+
+<div id="printArea"></div>
+
+<script>
+const STORAGE_KEY = "reiseplanung_tracker";
+const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+const OSRM_URL = "https://router.project-osrm.org/route/v1/driving/";
+
+function leererZustand() {
+  return { reiseName: "", budget: 4000, personen: 2, reiseart: "auto", flugkosten: 0, mietwagenkosten: 0, etappen: [], maut: [], tanken: [] };
+}
+
+function escapeAttr(str) {
+  return String(str || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+function istZahl(n) {
+  return n !== null && n !== undefined && !isNaN(n);
+}
+
+function laden() {
+  const roh = localStorage.getItem(STORAGE_KEY);
+  if (!roh) return leererZustand();
+  const daten = JSON.parse(roh);
+  return Object.assign(leererZustand(), daten);
+}
+
+function speichern(daten) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(daten));
+}
+
+function neueId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function zahl(str) {
+  if (str === undefined || str === null) return NaN;
+  return parseFloat(String(str).replace(",", "."));
+}
+
+function eur(n, nachkomma) {
+  if (n === null || n === undefined || isNaN(n)) return "–";
+  return n.toLocaleString("de-DE", { minimumFractionDigits: nachkomma ?? 2, maximumFractionDigits: nachkomma ?? 2 }) + " €";
+}
+
+function kmFmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return "–";
+  return n.toLocaleString("de-DE", { maximumFractionDigits: 1 }) + " km";
+}
+
+function datumFmt(iso) {
+  if (!iso) return "–";
+  const [j, m, t] = iso.split("-");
+  return `${t}.${m}.${j}`;
+}
+
+/* ---------- Grunddaten ---------- */
+
+function grundSpeichern() {
+  const daten = laden();
+  daten.reiseName = document.getElementById("reiseName").value;
+  const budget = zahl(document.getElementById("budgetGeplant").value);
+  const personen = zahl(document.getElementById("personen").value);
+  const flug = zahl(document.getElementById("flugkosten").value);
+  const mietwagen = zahl(document.getElementById("mietwagenkosten").value);
+  daten.budget = isNaN(budget) ? 0 : budget;
+  daten.personen = isNaN(personen) || personen <= 0 ? 1 : personen;
+  daten.flugkosten = isNaN(flug) ? 0 : flug;
+  daten.mietwagenkosten = isNaN(mietwagen) ? 0 : mietwagen;
+  speichern(daten);
+  renderBudget(daten);
+  renderEtappen(daten);
+}
+
+/* ---------- Reiseart ---------- */
+
+function reiseartSetzen(value) {
+  const daten = laden();
+  daten.reiseart = value;
+  speichern(daten);
+  layoutAktualisieren(daten);
+  renderEtappen(daten);
+  renderBudget(daten);
+  renderKarte(daten);
+}
+
+function reiseartLabel(value) {
+  if (value === "flug") return "Flugzeug";
+  if (value === "flug_mietwagen") return "Flugzeug + Mietwagen";
+  return "Auto";
+}
+
+function layoutAktualisieren(daten) {
+  document.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.value === daten.reiseart));
+
+  document.getElementById("routeFelder").style.display = daten.reiseart === "flug" ? "none" : "block";
+
+  const zeigenAutoTeile = daten.reiseart !== "flug";
+  document.getElementById("navMaut").style.display = zeigenAutoTeile ? "inline-block" : "none";
+  document.getElementById("navTanken").style.display = zeigenAutoTeile ? "inline-block" : "none";
+  document.getElementById("maut").style.display = zeigenAutoTeile ? "block" : "none";
+  document.getElementById("tanken").style.display = zeigenAutoTeile ? "block" : "none";
+
+  document.getElementById("flugkostenField").style.display = daten.reiseart !== "auto" ? "block" : "none";
+  document.getElementById("mietwagenkostenField").style.display = daten.reiseart === "flug_mietwagen" ? "block" : "none";
+}
+
+/* ---------- Etappen ---------- */
+
+let geocodeCache = {};
+let routeCache = { von: "", nach: "", vonCoord: null, nachCoord: null };
+let routeCacheEdit = { von: "", nach: "", vonCoord: null, nachCoord: null };
+let etappeBearbeitenId = null;
+
+function warten(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function geocodeOrt(text) {
+  const key = text.trim().toLowerCase();
+  if (!key) return null;
+  if (geocodeCache[key]) return geocodeCache[key];
+  const url = `${NOMINATIM_URL}?format=json&limit=1&q=${encodeURIComponent(text)}`;
+  const res = await fetch(url, { headers: { "Accept-Language": "de" } });
+  const daten = await res.json();
+  if (!daten.length) return null;
+  const coord = { lat: parseFloat(daten[0].lat), lon: parseFloat(daten[0].lon) };
+  geocodeCache[key] = coord;
+  return coord;
+}
+
+function fahrzeitText(sekunden) {
+  const gesamtMin = Math.round(sekunden / 60);
+  const h = Math.floor(gesamtMin / 60);
+  const m = gesamtMin % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
+
+async function routeBerechnenKern(von, nach, btn) {
+  const textVorher = btn.textContent;
+  btn.textContent = "Berechne Route...";
+  btn.disabled = true;
+  try {
+    const [vonCoord, nachCoord] = await Promise.all([geocodeOrt(von), geocodeOrt(nach)]);
+    if (!vonCoord || !nachCoord) {
+      alert("Einer der beiden Orte wurde nicht gefunden. Bitte Strecke/Fahrzeit manuell eintragen.");
+      return null;
+    }
+    const url = `${OSRM_URL}${vonCoord.lon},${vonCoord.lat};${nachCoord.lon},${nachCoord.lat}?overview=false`;
+    const res = await fetch(url);
+    const daten = await res.json();
+    if (daten.code !== "Ok" || !daten.routes || !daten.routes.length) {
+      alert("Route konnte nicht berechnet werden. Bitte Strecke/Fahrzeit manuell eintragen.");
+      return null;
+    }
+    const route = daten.routes[0];
+    return { strecke: route.distance / 1000, fahrzeit: fahrzeitText(route.duration), vonCoord, nachCoord };
+  } catch (err) {
+    alert("Route konnte nicht berechnet werden (keine Internetverbindung?). Bitte Strecke/Fahrzeit manuell eintragen.");
+    return null;
+  } finally {
+    btn.textContent = textVorher;
+    btn.disabled = false;
+  }
+}
+
+async function routeBerechnen() {
+  const von = document.getElementById("etVon").value.trim();
+  const nach = document.getElementById("etNach").value.trim();
+  if (!von || !nach) {
+    alert("Bitte zuerst 'Von' und 'Nach' ausfüllen.");
+    return;
+  }
+  const ergebnis = await routeBerechnenKern(von, nach, document.getElementById("routeBtn"));
+  if (!ergebnis) return;
+  document.getElementById("etStrecke").value = ergebnis.strecke.toFixed(1).replace(".", ",");
+  document.getElementById("etFahrzeit").value = ergebnis.fahrzeit;
+  routeCache = { von, nach, vonCoord: ergebnis.vonCoord, nachCoord: ergebnis.nachCoord };
+}
+
+async function routeBerechnenEdit() {
+  const von = document.getElementById("etEditVon").value.trim();
+  const nach = document.getElementById("etEditNach").value.trim();
+  if (!von || !nach) {
+    alert("Bitte zuerst 'Von' und 'Nach' ausfüllen.");
+    return;
+  }
+  const ergebnis = await routeBerechnenKern(von, nach, document.getElementById("routeBtnEdit"));
+  if (!ergebnis) return;
+  document.getElementById("etEditStrecke").value = ergebnis.strecke.toFixed(1).replace(".", ",");
+  document.getElementById("etEditFahrzeit").value = ergebnis.fahrzeit;
+  routeCacheEdit = { von, nach, vonCoord: ergebnis.vonCoord, nachCoord: ergebnis.nachCoord };
+}
+
+function etappeSpeichern() {
+  const von = document.getElementById("etVon").value.trim();
+  const nach = document.getElementById("etNach").value.trim();
+  if (!von || !nach) {
+    alert("Bitte 'Von' und 'Nach' ausfüllen.");
+    return;
+  }
+  const daten = laden();
+  const eintrag = {
+    id: neueId(),
+    von, nach,
+    anreise: document.getElementById("etAnreise").value,
+    abreise: document.getElementById("etAbreise").value,
+    strecke: daten.reiseart !== "flug" ? zahl(document.getElementById("etStrecke").value) : NaN,
+    fahrzeit: daten.reiseart !== "flug" ? document.getElementById("etFahrzeit").value.trim() : "",
+    hotel: document.getElementById("etHotel").value.trim(),
+    preis: zahl(document.getElementById("etPreis").value),
+    status: document.getElementById("etStatus").value.trim()
+  };
+  if (routeCache.von === von && routeCache.nach === nach) {
+    eintrag.vonLat = routeCache.vonCoord.lat;
+    eintrag.vonLon = routeCache.vonCoord.lon;
+    eintrag.nachLat = routeCache.nachCoord.lat;
+    eintrag.nachLon = routeCache.nachCoord.lon;
+  }
+  daten.etappen.push(eintrag);
+  speichern(daten);
+  routeCache = { von: "", nach: "", vonCoord: null, nachCoord: null };
+
+  ["etVon","etNach","etAnreise","etAbreise","etStrecke","etFahrzeit","etHotel","etPreis","etStatus"]
+    .forEach(id => document.getElementById(id).value = "");
+
+  renderEtappen(daten);
+  renderBudget(daten);
+  renderKarte(daten);
+}
+
+function etappeLoeschen(id) {
+  const daten = laden();
+  daten.etappen = daten.etappen.filter(e => e.id !== id);
+  speichern(daten);
+  renderEtappen(daten);
+  renderBudget(daten);
+  renderKarte(daten);
+}
+
+function etappeBearbeitenStart(id) {
+  etappeBearbeitenId = id;
+  routeCacheEdit = { von: "", nach: "", vonCoord: null, nachCoord: null };
+  renderEtappen(laden());
+}
+
+function etappeBearbeitenAbbrechen() {
+  etappeBearbeitenId = null;
+  renderEtappen(laden());
+}
+
+function etappeBearbeitenSpeichern(id) {
+  const von = document.getElementById("etEditVon").value.trim();
+  const nach = document.getElementById("etEditNach").value.trim();
+  if (!von || !nach) {
+    alert("Bitte 'Von' und 'Nach' ausfüllen.");
+    return;
+  }
+  const daten = laden();
+  const e = daten.etappen.find(x => x.id === id);
+  if (!e) return;
+
+  if (von !== e.von) { delete e.vonLat; delete e.vonLon; }
+  if (nach !== e.nach) { delete e.nachLat; delete e.nachLon; }
+
+  e.von = von;
+  e.nach = nach;
+  e.anreise = document.getElementById("etEditAnreise").value;
+  e.abreise = document.getElementById("etEditAbreise").value;
+  e.hotel = document.getElementById("etEditHotel").value.trim();
+  e.preis = zahl(document.getElementById("etEditPreis").value);
+  e.status = document.getElementById("etEditStatus").value.trim();
+  if (daten.reiseart !== "flug") {
+    e.strecke = zahl(document.getElementById("etEditStrecke").value);
+    e.fahrzeit = document.getElementById("etEditFahrzeit").value.trim();
+  } else {
+    e.strecke = NaN;
+    e.fahrzeit = "";
+  }
+  if (routeCacheEdit.von === von && routeCacheEdit.nach === nach) {
+    e.vonLat = routeCacheEdit.vonCoord.lat;
+    e.vonLon = routeCacheEdit.vonCoord.lon;
+    e.nachLat = routeCacheEdit.nachCoord.lat;
+    e.nachLon = routeCacheEdit.nachCoord.lon;
+  }
+
+  speichern(daten);
+  etappeBearbeitenId = null;
+  routeCacheEdit = { von: "", nach: "", vonCoord: null, nachCoord: null };
+  renderEtappen(daten);
+  renderBudget(daten);
+  renderKarte(daten);
+}
+
+function naechteBerechnen(anreise, abreise) {
+  if (!anreise || !abreise) return null;
+  const diff = Math.round((new Date(abreise) - new Date(anreise)) / 86400000);
+  return diff >= 0 ? diff : null;
+}
+
+function etappeEditKarteHtml(e, daten) {
+  const routeFelder = daten.reiseart !== "flug" ? `
+      <button type="button" class="btn-export" id="routeBtnEdit" onclick="routeBerechnenEdit()" style="margin-bottom:14px;">📍 Route automatisch berechnen (Von → Nach)</button>
+      <div class="field-row">
+        <div class="field">
+          <label>Strecke (km)</label>
+          <input id="etEditStrecke" type="text" inputmode="decimal" value="${istZahl(e.strecke) ? String(e.strecke).replace(".", ",") : ""}">
+        </div>
+        <div class="field">
+          <label>Fahrzeit</label>
+          <input id="etEditFahrzeit" type="text" value="${escapeAttr(e.fahrzeit)}">
+        </div>
+      </div>` : "";
+
+  return `
+    <div class="entry-card">
+      <div class="field-row">
+        <div class="field"><label>Von</label><input id="etEditVon" type="text" value="${escapeAttr(e.von)}"></div>
+        <div class="field"><label>Nach</label><input id="etEditNach" type="text" value="${escapeAttr(e.nach)}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Anreisedatum</label><input id="etEditAnreise" type="date" value="${e.anreise || ""}"></div>
+        <div class="field"><label>Abreisedatum</label><input id="etEditAbreise" type="date" value="${e.abreise || ""}"></div>
+      </div>
+      ${routeFelder}
+      <div class="field"><label>Hotel / Unterkunft</label><input id="etEditHotel" type="text" value="${escapeAttr(e.hotel)}"></div>
+      <div class="field"><label>Hotelkosten (€)</label><input id="etEditPreis" type="text" inputmode="decimal" value="${istZahl(e.preis) ? String(e.preis).replace(".", ",") : ""}"></div>
+      <div class="field"><label>Buchungsstatus / Termin</label><input id="etEditStatus" type="text" value="${escapeAttr(e.status)}"></div>
+      <div class="field-row">
+        <button class="btn-primary" onclick="etappeBearbeitenSpeichern('${e.id}')">Speichern</button>
+        <button class="btn-export" onclick="etappeBearbeitenAbbrechen()">Abbrechen</button>
+      </div>
+    </div>`;
+}
+
+function renderEtappen(daten) {
+  const el = document.getElementById("etappenListe");
+  if (daten.etappen.length === 0) {
+    el.innerHTML = `<div class="empty">Noch keine Etappen eingetragen.</div>`;
+    return;
+  }
+  el.innerHTML = daten.etappen.map((e, i) => {
+    if (e.id === etappeBearbeitenId) return etappeEditKarteHtml(e, daten);
+
+    const naechte = naechteBerechnen(e.anreise, e.abreise);
+    const preisProPerson = istZahl(e.preis) ? e.preis / daten.personen : NaN;
+    const routeItems = daten.reiseart !== "flug" ? `
+        <div class="item"><span>Strecke</span><b>${kmFmt(e.strecke)}</b></div>
+        <div class="item"><span>Fahrzeit</span><b>${e.fahrzeit || "–"}</b></div>` : "";
+    return `
+    <div class="entry-card">
+      <div class="entry-header">
+        <span class="title">${i + 1}. ${e.von} → ${e.nach}</span>
+        <div class="entry-actions">
+          <button class="del-btn" onclick="etappeBearbeitenStart('${e.id}')">✎</button>
+          <button class="del-btn" onclick="etappeLoeschen('${e.id}')">✕</button>
+        </div>
+      </div>
+      <div class="entry-grid">
+        <div class="item"><span>Anreise</span><b>${datumFmt(e.anreise)}</b></div>
+        <div class="item"><span>Abreise</span><b>${datumFmt(e.abreise)}</b></div>
+        <div class="item"><span>Nächte</span><b>${naechte === null ? "–" : naechte}</b></div>
+        ${routeItems}
+        <div class="item"><span>Hotel</span><b>${e.hotel || "–"}</b></div>
+        <div class="item preis"><span>Hotelkosten</span><b>${eur(e.preis)}</b></div>
+        <div class="item preis"><span>Hotelkosten/Person</span><b>${eur(preisProPerson)}</b></div>
+      </div>
+      ${e.status ? `<div class="entry-status">${e.status}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+/* ---------- Routenkarte ---------- */
+
+let kartenMap = null;
+let kartenLayerGroup = null;
+
+function nummerIcon(n) {
+  return L.divIcon({
+    className: "num-marker",
+    html: `<div style="background:#ff9f0a;color:#1a1300;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;box-shadow:0 0 0 2px #1a1c22;">${n}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13]
+  });
+}
+
+async function renderKarte(daten) {
+  const container = document.getElementById("routenkarte");
+  const hinweis = document.getElementById("kartenHinweis");
+
+  if (daten.etappen.length === 0) {
+    container.style.display = "none";
+    hinweis.textContent = "Noch keine Etappen – füge eine Etappe hinzu, um die Route zu sehen.";
+    return;
+  }
+
+  container.style.display = "block";
+  if (!kartenMap) {
+    kartenMap = L.map(container, { attributionControl: true });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap-Mitwirkende'
+    }).addTo(kartenMap);
+    kartenLayerGroup = L.layerGroup().addTo(kartenMap);
+  } else {
+    kartenMap.invalidateSize();
+  }
+  kartenLayerGroup.clearLayers();
+  hinweis.textContent = "Karte wird geladen...";
+
+  let geaendert = false;
+  for (const e of daten.etappen) {
+    if (!e.vonLat || !e.vonLon) {
+      const c = await geocodeOrt(e.von);
+      if (c) { e.vonLat = c.lat; e.vonLon = c.lon; geaendert = true; }
+      await warten(1100);
+    }
+    if (!e.nachLat || !e.nachLon) {
+      const c = await geocodeOrt(e.nach);
+      if (c) { e.nachLat = c.lat; e.nachLon = c.lon; geaendert = true; }
+      await warten(1100);
+    }
+  }
+  if (geaendert) speichern(daten);
+
+  const punkte = [{ label: daten.etappen[0].von, lat: daten.etappen[0].vonLat, lon: daten.etappen[0].vonLon }];
+  daten.etappen.forEach(e => punkte.push({ label: e.nach, lat: e.nachLat, lon: e.nachLon }));
+  const gueltig = punkte.filter(p => p.lat && p.lon);
+
+  if (gueltig.length === 0) {
+    hinweis.textContent = "Orte konnten nicht gefunden werden – Route kann nicht angezeigt werden.";
+    return;
+  }
+
+  gueltig.forEach((p, i) => {
+    L.marker([p.lat, p.lon], { icon: nummerIcon(i + 1) }).addTo(kartenLayerGroup).bindPopup(`${i + 1}. ${p.label}`);
+  });
+
+  if (gueltig.length >= 2) {
+    try {
+      const coordsStr = gueltig.map(p => `${p.lon},${p.lat}`).join(";");
+      const res = await fetch(`${OSRM_URL}${coordsStr}?overview=full&geometries=geojson`);
+      const routenDaten = await res.json();
+      if (routenDaten.code === "Ok" && routenDaten.routes && routenDaten.routes.length) {
+        const linie = routenDaten.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        L.polyline(linie, { color: "#ff9f0a", weight: 4 }).addTo(kartenLayerGroup);
+      }
+    } catch (err) { /* Marker bleiben trotzdem sichtbar */ }
+  }
+
+  kartenMap.fitBounds(L.latLngBounds(gueltig.map(p => [p.lat, p.lon])), { padding: [24, 24] });
+  hinweis.textContent = `Route über ${gueltig.length} Stationen`;
+}
+
+/* ---------- Maut ---------- */
+
+function mautSpeichern() {
+  const betrag = zahl(document.getElementById("mautBetrag").value);
+  if (isNaN(betrag) || betrag <= 0) {
+    alert("Bitte einen gültigen Betrag eingeben.");
+    return;
+  }
+  const daten = laden();
+  daten.maut.push({
+    id: neueId(),
+    ort: document.getElementById("mautOrt").value.trim(),
+    betrag
+  });
+  speichern(daten);
+  document.getElementById("mautOrt").value = "";
+  document.getElementById("mautBetrag").value = "";
+  renderMaut(daten);
+  renderBudget(daten);
+}
+
+function mautLoeschen(id) {
+  const daten = laden();
+  daten.maut = daten.maut.filter(m => m.id !== id);
+  speichern(daten);
+  renderMaut(daten);
+  renderBudget(daten);
+}
+
+function renderMaut(daten) {
+  const el = document.getElementById("mautListe");
+  if (daten.maut.length === 0) {
+    el.innerHTML = `<div class="empty">Noch keine Mautkosten eingetragen.</div>`;
+    return;
+  }
+  el.innerHTML = daten.maut.map((m, i) => `
+    <div class="entry-card">
+      <div class="entry-header">
+        <span class="title">${i + 1}. ${m.ort || "Maut"}</span>
+        <button class="del-btn" onclick="mautLoeschen('${m.id}')">✕</button>
+      </div>
+      <div class="entry-grid">
+        <div class="item preis"><span>Betrag</span><b>${eur(m.betrag)}</b></div>
+      </div>
+    </div>`).join("");
+}
+
+/* ---------- Tanken ---------- */
+
+function tankenSpeichern() {
+  const kmStart = zahl(document.getElementById("tkKmStart").value);
+  const liter = zahl(document.getElementById("tkLiter").value);
+  const preis = zahl(document.getElementById("tkPreis").value);
+
+  if (!kmStart || !liter || !preis || kmStart <= 0 || liter <= 0 || preis <= 0) {
+    alert("Bitte alle Felder mit gültigen Werten ausfüllen.");
+    return;
+  }
+
+  const daten = laden();
+  const letzterKmStart = daten.tanken.length ? daten.tanken[0].kmStart : 0;
+  const kmDazwischen = kmStart > letzterKmStart ? kmStart - letzterKmStart : kmStart;
+
+  const verbrauch = (liter / kmDazwischen) * 100;
+  const preisProLiter = preis / liter;
+  const kostenProKm = preis / kmDazwischen;
+
+  const eintrag = {
+    id: neueId(),
+    datum: new Date().toLocaleDateString("de-DE"),
+    kmStart, kmDazwischen, liter, preis,
+    verbrauch, preisProLiter, kostenProKm
+  };
+
+  daten.tanken.unshift(eintrag);
+  speichern(daten);
+
+  document.getElementById("tkResult").style.display = "block";
+  document.getElementById("tkResult").innerHTML = `
+    Δ seit letztem Tanken: <b>${kmDazwischen.toFixed(1)} km</b><br>
+    Verbrauch: <b>${verbrauch.toFixed(2)} l/100km</b><br>
+    Preis pro Liter: <b>${preisProLiter.toFixed(3)} €</b><br>
+    Kosten pro km: <b>${kostenProKm.toFixed(3)} €</b>
+  `;
+
+  document.getElementById("tkKmStart").value = "";
+  document.getElementById("tkLiter").value = "";
+  document.getElementById("tkPreis").value = "";
+
+  renderTanken(daten);
+  renderBudget(daten);
+}
+
+function tankenLoeschen(id) {
+  const daten = laden();
+  daten.tanken = daten.tanken.filter(t => t.id !== id);
+  speichern(daten);
+  renderTanken(daten);
+  renderBudget(daten);
+}
+
+function tankenSummen(tanken) {
+  const gesamtKm = tanken.reduce((s, d) => s + d.kmDazwischen, 0);
+  const gesamtLiter = tanken.reduce((s, d) => s + d.liter, 0);
+  const gesamtPreis = tanken.reduce((s, d) => s + d.preis, 0);
+  const avgVerbrauch = gesamtKm ? (gesamtLiter / gesamtKm) * 100 : 0;
+  const avgPreisProLiter = gesamtLiter ? gesamtPreis / gesamtLiter : 0;
+  return { gesamtKm, gesamtLiter, gesamtPreis, avgVerbrauch, avgPreisProLiter };
+}
+
+function renderTanken(daten) {
+  const el = document.getElementById("tankenListe");
+  if (daten.tanken.length === 0) {
+    el.innerHTML = `<div class="empty">Noch keine Tankeinträge vorhanden.</div>`;
+    return;
+  }
+
+  const { avgVerbrauch, avgPreisProLiter, gesamtKm, gesamtLiter, gesamtPreis } = tankenSummen(daten.tanken);
+
+  const statsHtml = `
+    <div class="stats">
+      <div class="stat"><div class="val">${avgVerbrauch.toFixed(1)}</div><div class="lbl">Ø l/100km</div></div>
+      <div class="stat"><div class="val">${avgPreisProLiter.toFixed(2)}€</div><div class="lbl">Ø Preis/L</div></div>
+      <div class="stat"><div class="val">${daten.tanken.length}</div><div class="lbl">Tankstopps</div></div>
+      <div class="stat"><div class="val">${gesamtKm.toLocaleString("de-DE", {maximumFractionDigits: 0})}</div><div class="lbl">km gesamt</div></div>
+      <div class="stat"><div class="val">${gesamtLiter.toLocaleString("de-DE", {maximumFractionDigits: 1})}</div><div class="lbl">Liter gesamt</div></div>
+      <div class="stat"><div class="val">${gesamtPreis.toFixed(0)}€</div><div class="lbl">Kosten gesamt</div></div>
+    </div>`;
+
+  const chronologisch = [...daten.tanken].reverse();
+
+  el.innerHTML = statsHtml + chronologisch.map(d => `
+    <div class="entry-card">
+      <div class="entry-header">
+        <span class="date">${d.datum}</span>
+        <span class="kmstart">km-Stand: ${d.kmStart.toLocaleString("de-DE")}</span>
+        <button class="del-btn" onclick="tankenLoeschen('${d.id}')">✕</button>
+      </div>
+      <div class="entry-grid">
+        <div class="item"><span>Strecke</span><b>${d.kmDazwischen.toLocaleString("de-DE", {maximumFractionDigits: 1})} km</b></div>
+        <div class="item verbrauch"><span>Verbrauch</span><b>${d.verbrauch.toLocaleString("de-DE", {maximumFractionDigits: 1})} l/100km</b></div>
+        <div class="item"><span>Getankt</span><b>${d.liter.toLocaleString("de-DE", {minimumFractionDigits: 2})} l</b></div>
+        <div class="item"><span>Preis/Liter</span><b>${d.preisProLiter.toLocaleString("de-DE", {minimumFractionDigits: 2})} €</b></div>
+        <div class="item"><span>Gesamtpreis</span><b>${d.preis.toLocaleString("de-DE", {minimumFractionDigits: 2})} €</b></div>
+        <div class="item"><span>Kosten/km</span><b>${d.kostenProKm.toLocaleString("de-DE", {minimumFractionDigits: 3})} €</b></div>
+      </div>
+    </div>`).join("");
+}
+
+/* ---------- Budget-Dashboard ---------- */
+
+function budgetSummen(daten) {
+  const hotelkosten = daten.etappen.reduce((s, e) => s + (istZahl(e.preis) ? e.preis : 0), 0);
+  const mautkosten = daten.maut.reduce((s, m) => s + m.betrag, 0);
+  const tankkosten = daten.tanken.reduce((s, t) => s + t.preis, 0);
+  const flugkosten = daten.flugkosten || 0;
+  const mietwagenkosten = daten.mietwagenkosten || 0;
+  const gesamtkosten = hotelkosten + mautkosten + tankkosten + flugkosten + mietwagenkosten;
+  const restbudget = daten.budget - gesamtkosten;
+  const streckeGeplant = daten.etappen.reduce((s, e) => s + (isNaN(e.strecke) ? 0 : e.strecke), 0);
+  const streckeIst = daten.tanken.reduce((s, t) => s + t.kmDazwischen, 0);
+  return { hotelkosten, mautkosten, tankkosten, flugkosten, mietwagenkosten, gesamtkosten, restbudget, streckeGeplant, streckeIst };
+}
+
+function renderBudget(daten) {
+  const { hotelkosten, mautkosten, tankkosten, flugkosten, mietwagenkosten, gesamtkosten, restbudget, streckeGeplant, streckeIst } = budgetSummen(daten);
+  const statsEl = document.getElementById("statsBudget");
+
+  const kacheln = [
+    { val: eur(gesamtkosten, 0), lbl: "Gesamtkosten" },
+    { val: eur(daten.budget, 0), lbl: "Budget" },
+    { val: eur(restbudget, 0), lbl: "Restbudget", cls: restbudget < 0 ? "neg" : "pos" },
+    { val: eur(hotelkosten, 0), lbl: "Hotelkosten" }
+  ];
+  if (daten.reiseart !== "auto") kacheln.push({ val: eur(flugkosten, 0), lbl: "Flugkosten" });
+  if (daten.reiseart === "flug_mietwagen") kacheln.push({ val: eur(mietwagenkosten, 0), lbl: "Mietwagenkosten" });
+  if (daten.reiseart !== "flug") {
+    kacheln.push({ val: eur(mautkosten, 0), lbl: "Mautkosten" });
+    kacheln.push({ val: eur(tankkosten, 0), lbl: "Tankkosten" });
+  }
+
+  statsEl.innerHTML = kacheln.map(k => `<div class="stat"><div class="val ${k.cls || ""}">${k.val}</div><div class="lbl">${k.lbl}</div></div>`).join("");
+
+  document.getElementById("streckeInfo").textContent = daten.reiseart === "flug"
+    ? `Pro Person: ${eur(gesamtkosten / daten.personen, 0)}`
+    : `Strecke geplant: ${kmFmt(streckeGeplant)} · gefahren: ${kmFmt(streckeIst)} · pro Person: ${eur(gesamtkosten / daten.personen, 0)}`;
+}
+
+/* ---------- Reset ---------- */
+
+function allesLoeschen() {
+  if (confirm("Wirklich alle Reisedaten löschen (Etappen, Maut, Tanken, Budget)?")) {
+    localStorage.removeItem(STORAGE_KEY);
+    ladenUndRendern();
+  }
+}
+
+/* ---------- Export ---------- */
+
+function dateinameSicher(text) {
+  return text.replace(/[^a-zA-Z0-9äöüÄÖÜß _-]/g, "").trim().replace(/\s+/g, "_");
+}
+
+function exportCSV() {
+  const daten = laden();
+  if (daten.etappen.length === 0 && daten.maut.length === 0 && daten.tanken.length === 0) {
+    alert("Keine Daten zum Exportieren vorhanden.");
+    return;
+  }
+  const z = (n, nk) => isNaN(n) || n === null ? "–" : n.toFixed(nk).replace(".", ",");
+  const { hotelkosten, mautkosten, tankkosten, flugkosten, mietwagenkosten, gesamtkosten, restbudget } = budgetSummen(daten);
+  const zeilen = [];
+
+  if (daten.reiseName) zeilen.push(`Reise: ${daten.reiseName}`);
+  zeilen.push(`Reiseart: ${reiseartLabel(daten.reiseart)}`, "");
+
+  zeilen.push("ETAPPEN");
+  zeilen.push("#;Von;Nach;Anreise;Abreise;Nächte;Strecke (km);Fahrzeit;Hotel;Hotelkosten (EUR);Hotelkosten/Person (EUR);Status");
+  daten.etappen.forEach((e, i) => {
+    const naechte = naechteBerechnen(e.anreise, e.abreise);
+    const preisProPerson = istZahl(e.preis) ? e.preis / daten.personen : NaN;
+    zeilen.push([
+      i + 1, e.von, e.nach, datumFmt(e.anreise), datumFmt(e.abreise),
+      naechte === null ? "–" : naechte, z(e.strecke, 1), e.fahrzeit || "–", e.hotel || "–",
+      z(e.preis, 2), z(preisProPerson, 2), e.status || ""
+    ].join(";"));
+  });
+  zeilen.push(`GESAMT;;;;;;;;;${z(hotelkosten, 2)};${z(hotelkosten / daten.personen, 2)};`);
+  zeilen.push("");
+
+  zeilen.push("MAUT");
+  zeilen.push("#;Mautstelle / Land;Betrag (EUR)");
+  daten.maut.forEach((m, i) => zeilen.push([i + 1, m.ort || "", z(m.betrag, 2)].join(";")));
+  zeilen.push(`GESAMT;;${z(mautkosten, 2)}`);
+  zeilen.push("");
+
+  zeilen.push("TANKEN");
+  zeilen.push("Datum;km ab Start;Strecke (km);Liter;Preis (EUR);Preis pro Liter;Verbrauch (l/100km)");
+  const { gesamtKm, gesamtLiter, avgPreisProLiter, avgVerbrauch } = tankenSummen(daten.tanken);
+  [...daten.tanken].reverse().forEach(d => {
+    zeilen.push([
+      d.datum, z(d.kmStart, 1), z(d.kmDazwischen, 1), z(d.liter, 2),
+      z(d.preis, 2), z(d.preisProLiter, 3), z(d.verbrauch, 2)
+    ].join(";"));
+  });
+  zeilen.push(`GESAMT;;${z(gesamtKm, 1)};${z(gesamtLiter, 2)};${z(tankkosten, 2)};${z(avgPreisProLiter, 3)};${z(avgVerbrauch, 2)}`);
+  zeilen.push("");
+
+  zeilen.push("ZUSAMMENFASSUNG");
+  zeilen.push(`Hotelkosten;${z(hotelkosten, 2)}`);
+  if (daten.reiseart !== "flug") {
+    zeilen.push(`Mautkosten;${z(mautkosten, 2)}`);
+    zeilen.push(`Tankkosten;${z(tankkosten, 2)}`);
+  }
+  if (daten.reiseart !== "auto") zeilen.push(`Flugkosten;${z(flugkosten, 2)}`);
+  if (daten.reiseart === "flug_mietwagen") zeilen.push(`Mietwagenkosten;${z(mietwagenkosten, 2)}`);
+  zeilen.push(`Gesamtkosten;${z(gesamtkosten, 2)}`);
+  zeilen.push(`Budget;${z(daten.budget, 2)}`);
+  zeilen.push(`Restbudget;${z(restbudget, 2)}`);
+
+  const csvInhalt = "﻿" + zeilen.join("\r\n");
+  const blob = new Blob([csvInhalt], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const namensteil = daten.reiseName ? `${dateinameSicher(daten.reiseName)}_` : "";
+  a.download = `reise_${namensteil}${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportPDF() {
+  const daten = laden();
+  if (daten.etappen.length === 0 && daten.maut.length === 0 && daten.tanken.length === 0) {
+    alert("Keine Daten zum Exportieren vorhanden.");
+    return;
+  }
+  const { hotelkosten, mautkosten, tankkosten, flugkosten, mietwagenkosten, gesamtkosten, restbudget } = budgetSummen(daten);
+  const { gesamtKm, gesamtLiter, avgPreisProLiter, avgVerbrauch } = tankenSummen(daten.tanken);
+
+  const etappenZeilen = daten.etappen.map((e, i) => {
+    const naechte = naechteBerechnen(e.anreise, e.abreise);
+    const preisProPerson = istZahl(e.preis) ? e.preis / daten.personen : NaN;
+    return `<tr>
+      <td>${i + 1}</td><td>${e.von} → ${e.nach}</td><td>${datumFmt(e.anreise)}</td><td>${datumFmt(e.abreise)}</td>
+      <td>${naechte === null ? "–" : naechte}</td><td>${kmFmt(e.strecke)}</td><td>${e.hotel || "–"}</td>
+      <td>${eur(e.preis)}</td><td>${eur(preisProPerson)}</td>
+    </tr>`;
+  }).join("");
+  const zusammenfassungZeilen = [`<tr><td>Hotelkosten</td><td>${eur(hotelkosten)}</td></tr>`];
+  if (daten.reiseart !== "flug") {
+    zusammenfassungZeilen.push(`<tr><td>Mautkosten</td><td>${eur(mautkosten)}</td></tr>`);
+    zusammenfassungZeilen.push(`<tr><td>Tankkosten</td><td>${eur(tankkosten)}</td></tr>`);
+  }
+  if (daten.reiseart !== "auto") zusammenfassungZeilen.push(`<tr><td>Flugkosten</td><td>${eur(flugkosten)}</td></tr>`);
+  if (daten.reiseart === "flug_mietwagen") zusammenfassungZeilen.push(`<tr><td>Mietwagenkosten</td><td>${eur(mietwagenkosten)}</td></tr>`);
+  zusammenfassungZeilen.push(`<tr><td>Gesamtkosten</td><td>${eur(gesamtkosten)}</td></tr>`);
+  zusammenfassungZeilen.push(`<tr><td>Budget</td><td>${eur(daten.budget)}</td></tr>`);
+  zusammenfassungZeilen.push(`<tr><td>Restbudget</td><td>${eur(restbudget)}</td></tr>`);
+
+  const mautZeilen = daten.maut.map((m, i) => `<tr><td>${i + 1}</td><td>${m.ort || "–"}</td><td>${eur(m.betrag)}</td></tr>`).join("");
+
+  const tankenZeilen = [...daten.tanken].reverse().map(d => `<tr>
+    <td>${d.datum}</td><td>${d.kmStart.toLocaleString("de-DE")}</td><td>${d.kmDazwischen.toLocaleString("de-DE", {maximumFractionDigits: 1})}</td>
+    <td>${d.liter.toLocaleString("de-DE", {minimumFractionDigits: 2})}</td><td>${eur(d.preis)}</td>
+    <td>${d.preisProLiter.toLocaleString("de-DE", {minimumFractionDigits: 2})}</td><td>${d.verbrauch.toLocaleString("de-DE", {maximumFractionDigits: 1})}</td>
+  </tr>`).join("");
+
+  document.getElementById("printArea").innerHTML = `
+    <h2 style="margin-bottom:4px;">🧭 Reiseplanung &amp; Tracker – Auswertung${daten.reiseName ? ": " + daten.reiseName : ""}</h2>
+    <p style="margin-top:0;color:#555;">Erstellt am ${new Date().toLocaleDateString("de-DE")} · Reiseart: ${reiseartLabel(daten.reiseart)}</p>
+
+    <h2>Etappen &amp; Hotels</h2>
+    <table>
+      <thead><tr><th>#</th><th>Etappe</th><th>Anreise</th><th>Abreise</th><th>Nächte</th><th>Strecke</th><th>Hotel</th><th>Hotelkosten</th><th>Hotelkosten/Person</th></tr></thead>
+      <tbody>${etappenZeilen}</tbody>
+      <tfoot><tr><td colspan="7">Gesamt</td><td>${eur(hotelkosten)}</td><td>${eur(hotelkosten / daten.personen)}</td></tr></tfoot>
+    </table>
+
+    ${daten.reiseart !== "flug" ? `
+    <h2>Mautkosten</h2>
+    <table>
+      <thead><tr><th>#</th><th>Mautstelle / Land</th><th>Betrag</th></tr></thead>
+      <tbody>${mautZeilen}</tbody>
+      <tfoot><tr><td colspan="2">Gesamt</td><td>${eur(mautkosten)}</td></tr></tfoot>
+    </table>
+
+    <h2>Tanken</h2>
+    <table>
+      <thead><tr><th>Datum</th><th>km ab Start</th><th>Strecke</th><th>Liter</th><th>Preis</th><th>€/L</th><th>l/100km</th></tr></thead>
+      <tbody>${tankenZeilen}</tbody>
+      <tfoot><tr><td colspan="2">Gesamt</td><td>${kmFmt(gesamtKm)}</td><td>${gesamtLiter.toLocaleString("de-DE", {minimumFractionDigits: 2})} l</td><td>${eur(tankkosten)}</td><td>${avgPreisProLiter.toFixed(2)} €</td><td>${avgVerbrauch.toFixed(1)}</td></tr></tfoot>
+    </table>` : ""}
+
+    <h2>Zusammenfassung</h2>
+    <table>
+      <tbody>
+        ${zusammenfassungZeilen.join("\n")}
+      </tbody>
+    </table>
+  `;
+  window.print();
+}
+
+/* ---------- Init ---------- */
+
+function ladenUndRendern() {
+  const daten = laden();
+  document.getElementById("reiseName").value = daten.reiseName;
+  document.getElementById("budgetGeplant").value = daten.budget || "";
+  document.getElementById("personen").value = daten.personen || "";
+  document.getElementById("flugkosten").value = daten.flugkosten || "";
+  document.getElementById("mietwagenkosten").value = daten.mietwagenkosten || "";
+  layoutAktualisieren(daten);
+  renderBudget(daten);
+  renderEtappen(daten);
+  renderKarte(daten);
+  renderMaut(daten);
+  renderTanken(daten);
+}
+
+ladenUndRendern();
+</script>
+
+</body>
+</html>
