@@ -256,6 +256,24 @@
     border-color: var(--accent);
   }
   .entry-actions { display: flex; gap: 14px; }
+  .switch { position: relative; display: inline-block; width: 50px; height: 30px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch-slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background-color: var(--card-2);
+    border: 1px solid #33353d;
+    border-radius: 999px;
+    transition: 0.2s;
+  }
+  .switch-slider:before {
+    position: absolute; content: "";
+    height: 22px; width: 22px; left: 3px; top: 3px;
+    background-color: var(--text-dim);
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+  .switch input:checked + .switch-slider { background-color: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .switch-slider:before { transform: translateX(20px); background-color: #1a1300; }
   #routenkarte {
     height: 260px;
     border-radius: 12px;
@@ -297,8 +315,8 @@
 <div class="navrow">
   <a href="#budget">💶 Budget</a>
   <a href="#etappen">🗺️ Etappen</a>
-  <a href="#maut" id="navMaut">🛣️ Maut</a>
   <a href="#tanken" id="navTanken">⛽ Tanken</a>
+  <a href="#maut" id="navMaut">🛣️ Maut</a>
 </div>
 
 <div class="card">
@@ -308,6 +326,15 @@
       <button type="button" class="seg-btn" data-value="auto" onclick="reiseartSetzen('auto')">🚗 Auto</button>
       <button type="button" class="seg-btn" data-value="flug" onclick="reiseartSetzen('flug')">✈️ Flugzeug</button>
       <button type="button" class="seg-btn" data-value="flug_mietwagen" onclick="reiseartSetzen('flug_mietwagen')">✈️🚗 Flug + Mietwagen</button>
+    </div>
+  </div>
+  <div class="field" id="mautToggleField" style="margin-bottom:0;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <label style="margin-bottom:0;">Mautkosten verfolgen</label>
+      <label class="switch">
+        <input type="checkbox" id="mautAktivToggle" onchange="mautAktivSetzen()">
+        <span class="switch-slider"></span>
+      </label>
     </div>
   </div>
 </div>
@@ -403,23 +430,6 @@
   </div>
 </section>
 
-<section id="maut">
-  <h2>🛣️ Mautkosten</h2>
-  <div id="mautListe"></div>
-
-  <div class="card">
-    <div class="field">
-      <label>Mautstelle / Land</label>
-      <input id="mautOrt" type="text" placeholder="z. B. Frankreich, A63">
-    </div>
-    <div class="field">
-      <label>Betrag (€)</label>
-      <input id="mautBetrag" type="text" inputmode="decimal" placeholder="z. B. 17,00">
-    </div>
-    <button class="btn-primary" onclick="mautSpeichern()">Maut speichern</button>
-  </div>
-</section>
-
 <section id="tanken">
   <h2>⛽ Tanken</h2>
   <div id="tankenListe"></div>
@@ -442,6 +452,23 @@
   </div>
 </section>
 
+<section id="maut">
+  <h2>🛣️ Mautkosten</h2>
+  <div id="mautListe"></div>
+
+  <div class="card">
+    <div class="field">
+      <label>Mautstelle / Land</label>
+      <input id="mautOrt" type="text" placeholder="z. B. Frankreich, A63">
+    </div>
+    <div class="field">
+      <label>Betrag (€)</label>
+      <input id="mautBetrag" type="text" inputmode="decimal" placeholder="z. B. 17,00">
+    </div>
+    <button class="btn-primary" onclick="mautSpeichern()">Maut speichern</button>
+  </div>
+</section>
+
 <div class="divider-label">Reise abschließen</div>
 <div class="export-row">
   <button class="btn-export" onclick="exportPDF()">📄 PDF exportieren</button>
@@ -457,7 +484,7 @@ const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const OSRM_URL = "https://router.project-osrm.org/route/v1/driving/";
 
 function leererZustand() {
-  return { reiseName: "", budget: 4000, personen: 2, reiseart: "auto", flugkosten: 0, mietwagenkosten: 0, etappen: [], maut: [], tanken: [] };
+  return { reiseName: "", budget: 4000, personen: 2, reiseart: "auto", mautAktiv: true, flugkosten: 0, mietwagenkosten: 0, etappen: [], maut: [], tanken: [] };
 }
 
 function escapeAttr(str) {
@@ -540,16 +567,29 @@ function reiseartLabel(value) {
   return "Auto";
 }
 
+function mautAktivSetzen() {
+  const daten = laden();
+  daten.mautAktiv = document.getElementById("mautAktivToggle").checked;
+  speichern(daten);
+  layoutAktualisieren(daten);
+  renderBudget(daten);
+}
+
 function layoutAktualisieren(daten) {
   document.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.value === daten.reiseart));
 
   document.getElementById("routeFelder").style.display = daten.reiseart === "flug" ? "none" : "block";
 
-  const zeigenAutoTeile = daten.reiseart !== "flug";
-  document.getElementById("navMaut").style.display = zeigenAutoTeile ? "inline-block" : "none";
-  document.getElementById("navTanken").style.display = zeigenAutoTeile ? "inline-block" : "none";
-  document.getElementById("maut").style.display = zeigenAutoTeile ? "block" : "none";
-  document.getElementById("tanken").style.display = zeigenAutoTeile ? "block" : "none";
+  const zeigenTanken = daten.reiseart !== "flug";
+  const zeigenMaut = daten.reiseart !== "flug" && daten.mautAktiv;
+
+  document.getElementById("navTanken").style.display = zeigenTanken ? "inline-block" : "none";
+  document.getElementById("tanken").style.display = zeigenTanken ? "block" : "none";
+  document.getElementById("navMaut").style.display = zeigenMaut ? "inline-block" : "none";
+  document.getElementById("maut").style.display = zeigenMaut ? "block" : "none";
+
+  document.getElementById("mautToggleField").style.display = daten.reiseart !== "flug" ? "block" : "none";
+  document.getElementById("mautAktivToggle").checked = daten.mautAktiv;
 
   document.getElementById("flugkostenField").style.display = daten.reiseart !== "auto" ? "block" : "none";
   document.getElementById("mietwagenkostenField").style.display = daten.reiseart === "flug_mietwagen" ? "block" : "none";
@@ -1078,10 +1118,8 @@ function renderBudget(daten) {
   ];
   if (daten.reiseart !== "auto") kacheln.push({ val: eur(flugkosten, 0), lbl: "Flugkosten" });
   if (daten.reiseart === "flug_mietwagen") kacheln.push({ val: eur(mietwagenkosten, 0), lbl: "Mietwagenkosten" });
-  if (daten.reiseart !== "flug") {
-    kacheln.push({ val: eur(mautkosten, 0), lbl: "Mautkosten" });
-    kacheln.push({ val: eur(tankkosten, 0), lbl: "Tankkosten" });
-  }
+  if (daten.reiseart !== "flug") kacheln.push({ val: eur(tankkosten, 0), lbl: "Tankkosten" });
+  if (daten.reiseart !== "flug" && daten.mautAktiv) kacheln.push({ val: eur(mautkosten, 0), lbl: "Mautkosten" });
 
   statsEl.innerHTML = kacheln.map(k => `<div class="stat"><div class="val ${k.cls || ""}">${k.val}</div><div class="lbl">${k.lbl}</div></div>`).join("");
 
@@ -1132,12 +1170,6 @@ function exportCSV() {
   zeilen.push(`GESAMT;;;;;;;;;${z(hotelkosten, 2)};${z(hotelkosten / daten.personen, 2)};`);
   zeilen.push("");
 
-  zeilen.push("MAUT");
-  zeilen.push("#;Mautstelle / Land;Betrag (EUR)");
-  daten.maut.forEach((m, i) => zeilen.push([i + 1, m.ort || "", z(m.betrag, 2)].join(";")));
-  zeilen.push(`GESAMT;;${z(mautkosten, 2)}`);
-  zeilen.push("");
-
   zeilen.push("TANKEN");
   zeilen.push("Datum;km ab Start;Strecke (km);Liter;Preis (EUR);Preis pro Liter;Verbrauch (l/100km)");
   const { gesamtKm, gesamtLiter, avgPreisProLiter, avgVerbrauch } = tankenSummen(daten.tanken);
@@ -1150,12 +1182,18 @@ function exportCSV() {
   zeilen.push(`GESAMT;;${z(gesamtKm, 1)};${z(gesamtLiter, 2)};${z(tankkosten, 2)};${z(avgPreisProLiter, 3)};${z(avgVerbrauch, 2)}`);
   zeilen.push("");
 
+  if (daten.reiseart !== "flug" && daten.mautAktiv) {
+    zeilen.push("MAUT");
+    zeilen.push("#;Mautstelle / Land;Betrag (EUR)");
+    daten.maut.forEach((m, i) => zeilen.push([i + 1, m.ort || "", z(m.betrag, 2)].join(";")));
+    zeilen.push(`GESAMT;;${z(mautkosten, 2)}`);
+    zeilen.push("");
+  }
+
   zeilen.push("ZUSAMMENFASSUNG");
   zeilen.push(`Hotelkosten;${z(hotelkosten, 2)}`);
-  if (daten.reiseart !== "flug") {
-    zeilen.push(`Mautkosten;${z(mautkosten, 2)}`);
-    zeilen.push(`Tankkosten;${z(tankkosten, 2)}`);
-  }
+  if (daten.reiseart !== "flug") zeilen.push(`Tankkosten;${z(tankkosten, 2)}`);
+  if (daten.reiseart !== "flug" && daten.mautAktiv) zeilen.push(`Mautkosten;${z(mautkosten, 2)}`);
   if (daten.reiseart !== "auto") zeilen.push(`Flugkosten;${z(flugkosten, 2)}`);
   if (daten.reiseart === "flug_mietwagen") zeilen.push(`Mietwagenkosten;${z(mietwagenkosten, 2)}`);
   zeilen.push(`Gesamtkosten;${z(gesamtkosten, 2)}`);
@@ -1194,10 +1232,8 @@ function exportPDF() {
     </tr>`;
   }).join("");
   const zusammenfassungZeilen = [`<tr><td>Hotelkosten</td><td>${eur(hotelkosten)}</td></tr>`];
-  if (daten.reiseart !== "flug") {
-    zusammenfassungZeilen.push(`<tr><td>Mautkosten</td><td>${eur(mautkosten)}</td></tr>`);
-    zusammenfassungZeilen.push(`<tr><td>Tankkosten</td><td>${eur(tankkosten)}</td></tr>`);
-  }
+  if (daten.reiseart !== "flug") zusammenfassungZeilen.push(`<tr><td>Tankkosten</td><td>${eur(tankkosten)}</td></tr>`);
+  if (daten.reiseart !== "flug" && daten.mautAktiv) zusammenfassungZeilen.push(`<tr><td>Mautkosten</td><td>${eur(mautkosten)}</td></tr>`);
   if (daten.reiseart !== "auto") zusammenfassungZeilen.push(`<tr><td>Flugkosten</td><td>${eur(flugkosten)}</td></tr>`);
   if (daten.reiseart === "flug_mietwagen") zusammenfassungZeilen.push(`<tr><td>Mietwagenkosten</td><td>${eur(mietwagenkosten)}</td></tr>`);
   zusammenfassungZeilen.push(`<tr><td>Gesamtkosten</td><td>${eur(gesamtkosten)}</td></tr>`);
@@ -1224,18 +1260,19 @@ function exportPDF() {
     </table>
 
     ${daten.reiseart !== "flug" ? `
-    <h2>Mautkosten</h2>
-    <table>
-      <thead><tr><th>#</th><th>Mautstelle / Land</th><th>Betrag</th></tr></thead>
-      <tbody>${mautZeilen}</tbody>
-      <tfoot><tr><td colspan="2">Gesamt</td><td>${eur(mautkosten)}</td></tr></tfoot>
-    </table>
-
     <h2>Tanken</h2>
     <table>
       <thead><tr><th>Datum</th><th>km ab Start</th><th>Strecke</th><th>Liter</th><th>Preis</th><th>€/L</th><th>l/100km</th></tr></thead>
       <tbody>${tankenZeilen}</tbody>
       <tfoot><tr><td colspan="2">Gesamt</td><td>${kmFmt(gesamtKm)}</td><td>${gesamtLiter.toLocaleString("de-DE", {minimumFractionDigits: 2})} l</td><td>${eur(tankkosten)}</td><td>${avgPreisProLiter.toFixed(2)} €</td><td>${avgVerbrauch.toFixed(1)}</td></tr></tfoot>
+    </table>` : ""}
+
+    ${daten.reiseart !== "flug" && daten.mautAktiv ? `
+    <h2>Mautkosten</h2>
+    <table>
+      <thead><tr><th>#</th><th>Mautstelle / Land</th><th>Betrag</th></tr></thead>
+      <tbody>${mautZeilen}</tbody>
+      <tfoot><tr><td colspan="2">Gesamt</td><td>${eur(mautkosten)}</td></tr></tfoot>
     </table>` : ""}
 
     <h2>Zusammenfassung</h2>
